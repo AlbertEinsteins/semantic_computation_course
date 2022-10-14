@@ -109,7 +109,7 @@ class Net(nn.Module):
         # [batch, hiddens] -> [batch, num_steps, hiddens]
         outputs = torch.cat(outputs, dim=-1).reshape((batch_size, num_steps, self.num_hiddens))
         H = torch.unsqueeze(H, dim=1)
-        # out 为一个特征向量，表示这个文本
+        # out 为一个特征向量，表示这个文本， 通过最后时间步的H向量作为query，key和value所有时间步的输出
         out = self.attention(H, outputs, outputs).squeeze(1)
         out = self.classifier(out)
         return out
@@ -141,6 +141,7 @@ def test3():
     net = Net(vocab_size=10, embed_size=8, num_hiddens=32, num_classes=5)
     X = torch.zeros((4, 7), dtype=torch.long)
     print(net(X).shape)
+
 
 if __name__ == '__main__':
     test3()

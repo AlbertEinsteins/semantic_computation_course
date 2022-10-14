@@ -3,3 +3,6 @@
 
 # Dataset
 dataset/**
+
+# json files
+*.json
