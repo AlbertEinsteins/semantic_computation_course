@@ -32,7 +32,7 @@ def data_loader(data, batch_size=16, shuffle=True, num_workers=4):
 def main():
     # ===================== prepare training =====================
     # load data
-    json_path = ''
+    json_path = '/home/anthony/Downloads/datasets/THUCNews/tokens.json'
     assert os.path.exists(json_path), 'dataset json file {} does not exist.'.format(json_path)
     train_data, test_data = load_data(json_path)
 

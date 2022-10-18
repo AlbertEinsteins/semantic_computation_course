@@ -6,3 +6,6 @@ dataset/**
 
 # json files
 *.json
+
+
+*/__pycache__

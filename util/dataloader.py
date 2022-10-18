@@ -5,7 +5,7 @@ import os.path
 import torch.utils.data
 import json
 import numpy as np
-import preprocess
+from . import preprocess
 
 
 class MyDataset(torch.utils.data.Dataset):
@@ -17,7 +17,7 @@ class MyDataset(torch.utils.data.Dataset):
     _ratio = 0.8
 
     def __init__(self, json_file_path='', train=True):
-        assert os.path.exists(json_file_path), 'json file {} does not exist.'
+        assert os.path.exists(json_file_path), 'json file {} does not exist.'.format(json_file_path)
         self.json_path = json_file_path
         self.train = train
 
