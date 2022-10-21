@@ -15,26 +15,45 @@ configs = {
     "epochs": 10,
 }
 
+def collate_fn(batch):
+    max_len = 500
+    (x_list, y_list) = zip(*batch)
 
-def load_data(json_path=''):
-    train_data, test_data = dataloader.MyDataset(json_file_path=json_path, train=True), \
-                            dataloader.MyDataset(json_file_path=json_path, train=False)
+    # 长了，截断；短了，补0
+    pad_f = lambda x: x[:max_len] if len(x) >= max_len \
+                                else x + [0 for _ in range(max_len - len(x))]
+    x_list = list(map(pad_f, x_list))
+    X = torch.stack([torch.tensor(x, dtype=torch.int32) \
+                     for x in x_list], dim=0)
+    y = torch.tensor(y_list, dtype=torch.long)
+    return X, y
+
+
+def load_data(json_path='', tokens_filepath=''):
+    train_data, test_data = dataloader.MyDataset(json_filepath=json_path, tokens_path=tokens_filepath, train=True), \
+                            dataloader.MyDataset(json_filepath=json_path, tokens_path=tokens_filepath, train=False)
     return train_data, test_data
 
 
-def data_loader(data, batch_size=16, shuffle=True, num_workers=4):
+def data_loader(data, batch_size=64, shuffle=True, num_workers=2):
     return torch.utils.data.DataLoader(data, batch_size=batch_size,
                                        shuffle=shuffle,
-                                       num_workers=num_workers)
+                                       num_workers=num_workers,
+                                       collate_fn=collate_fn,
+                                       )
 
 
 
 def main():
     # ===================== prepare training =====================
     # load data
-    json_path = '/home/anthony/Downloads/datasets/THUCNews/tokens.json'
+    json_path = '/home/anthony/Downloads/datasets/THUCNews/data.json'
     assert os.path.exists(json_path), 'dataset json file {} does not exist.'.format(json_path)
-    train_data, test_data = load_data(json_path)
+
+    tokens_path = '//home/anthony/Downloads/datasets/THUCNews/tokens_all.txt'
+    assert os.path.exists(tokens_path), 'tokens json file {} does not exist.'.format(tokens_path)
+
+    train_data, test_data = load_data(json_path, tokens_path)
 
     train_iter = data_loader(train_data)
     test_iter = data_loader(test_data)
@@ -52,22 +71,21 @@ def main():
 
     # set optimizer
     params = [p for p in net.parameters() if p.requires_grad]
-    optimizer = optim.Adam(params=net.parameters(), lr=configs['lr'])
+    optimizer = optim.Adam(params=params, lr=configs['lr'])
     # set loss function
     loss_fun = nn.CrossEntropyLoss()
 
     # ========================= training =======================
     best_acc = 0.0
-    val_nums = len(test_data)
+    val_nums = len(test_iter)
+    train_nums = len(train_iter)
     epochs = configs['epochs']
-    train_steps = len(train_iter)
-    save_weight_path = ''
+    save_weight_path = os.path.join(os.getcwd(), 'pretrained', 'pretrained.pth')
     for epoch in range(epochs):
         net.train()
         running_loss = 0.0
         train_bar = tqdm(train_iter, file=sys.stdout)
-
-        for (X, y) in train_bar:
+        for X, y in train_bar:
             optimizer.zero_grad()
             logits = net(X)
             loss = loss_fun(logits, y)
@@ -85,8 +103,11 @@ def main():
             val_bar = tqdm(test_iter, file=sys.stdout)
             for X, y in val_bar:
                 logits = net(X)
-                correct_num += torch.eq(logits, y).sum().item()
+                pred = torch.argmax(logits, dim=-1)
+                correct_num += torch.eq(pred, y).sum().item()
         val_acc = correct_num / val_nums
+        print('testing accuracy, {} epoch {}'.format(val_acc, epoch))
+
         # 存储权重
         if best_acc < val_acc:
             best_acc = val_acc

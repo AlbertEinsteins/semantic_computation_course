@@ -3,7 +3,7 @@ import this
 
 import torch
 from torch import nn
-
+from torch.nn import functional as F
 
 # Init Params
 def init_weights(shape, sigma=0.01):
@@ -99,8 +99,9 @@ class Net(nn.Module):
         self.classifier = nn.Linear(num_hiddens, num_classes)
 
     def forward(self, X):
-        # X [batch_size, num_steps, embedding]
         batch_size, num_steps = X.shape
+
+        # X [batch_size, num_steps, embedding]
         X = self.embedding(X)
         X_swap = X.permute(1, 0, 2)
         outputs, (H, _) = self.lstm_layer(X_swap)
