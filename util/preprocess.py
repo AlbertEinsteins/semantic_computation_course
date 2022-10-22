@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
+import torch.multiprocessing
 
 import hanlp
 import os
@@ -10,9 +11,8 @@ from tqdm import tqdm
 # extern package
 tokenizer = hanlp.load(hanlp.pretrained.tok.FINE_ELECTRA_SMALL_ZH)
 
-
 def split_text(raw_txt: str):
-    return tokenizer(raw_txt)
+    return tokenizer(raw_txt, )
 
 
 class ReadDatasetFold:
@@ -112,7 +112,7 @@ class Vocab:
 
 
 def main():
-    dir_path = '/home/anthony/Downloads/datasets/THUCNews'
+    dir_path = '/home/xf/disk/dataset/THUCNews'
     read_obj = ReadDatasetFold(dir_path=dir_path)
     read_obj.preprocess_data()
     print('-' * 50)

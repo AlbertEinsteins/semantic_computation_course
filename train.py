@@ -12,8 +12,11 @@ from util import dataloader
 
 configs = {
     "lr": 1e-4,
-    "epochs": 10,
+    "epochs": 5,
 }
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 
 def collate_fn(batch):
     max_len = 500
@@ -35,7 +38,7 @@ def load_data(json_path='', tokens_filepath=''):
     return train_data, test_data
 
 
-def data_loader(data, batch_size=64, shuffle=True, num_workers=2):
+def data_loader(data, batch_size=64, shuffle=True, num_workers=4):
     return torch.utils.data.DataLoader(data, batch_size=batch_size,
                                        shuffle=shuffle,
                                        num_workers=num_workers,
@@ -47,10 +50,10 @@ def data_loader(data, batch_size=64, shuffle=True, num_workers=2):
 def main():
     # ===================== prepare training =====================
     # load data
-    json_path = '/home/anthony/Downloads/datasets/THUCNews/data.json'
+    json_path = '/home/xf/disk/dataset/THUCNews/data.json'
     assert os.path.exists(json_path), 'dataset json file {} does not exist.'.format(json_path)
 
-    tokens_path = '//home/anthony/Downloads/datasets/THUCNews/tokens_all.txt'
+    tokens_path = '/home/xf/disk/dataset/THUCNews/tokens_all.txt'
     assert os.path.exists(tokens_path), 'tokens json file {} does not exist.'.format(tokens_path)
 
     train_data, test_data = load_data(json_path, tokens_path)
@@ -68,6 +71,7 @@ def main():
     num_classes = len(label_text)
     net = lstm.Net(vocab_size=vocab_size, embed_size=num_embeddings, num_hiddens=num_hiddens,
                    num_classes=num_classes)
+    net = net.to(device)
 
     # set optimizer
     params = [p for p in net.parameters() if p.requires_grad]
@@ -81,20 +85,25 @@ def main():
     train_nums = len(train_iter)
     epochs = configs['epochs']
     save_weight_path = os.path.join(os.getcwd(), 'pretrained', 'pretrained.pth')
+
+    if os.path.exists(save_weight_path):
+        net.load_state_dict(torch.load(save_weight_path, device=0))
     for epoch in range(epochs):
         net.train()
         running_loss = 0.0
         train_bar = tqdm(train_iter, file=sys.stdout)
         for X, y in train_bar:
+            X, y = X.to(device), y.to(device)
             optimizer.zero_grad()
             logits = net(X)
             loss = loss_fun(logits, y)
             loss.backward()
             optimizer.step()
 
-            # 打印，并保存到文件中
+            # 打印进度
             running_loss += loss
             train_bar.desc = f'training epoch [{epoch}/{epochs}], loss: {loss:.3f}'
+
 
         # 校验验证集的准确率
         net.eval()
