@@ -8,7 +8,7 @@ from torch import optim, nn
 from tqdm import tqdm
 
 from model import lstm
-from util import dataloader
+from util import dataloader, log
 
 configs = {
     "lr": 1e-4,
@@ -44,10 +44,9 @@ def data_loader(data, batch_size=64, shuffle=True, num_workers=4):
                                        num_workers=num_workers,
                                        collate_fn=collate_fn,
                                        )
-
-
-
 def main():
+    train_logger = log.FileLog('train.txt')
+    acc_logger = log.FileLog('test.txt')
     # ===================== prepare training =====================
     # load data
     json_path = '/home/xf/disk/dataset/THUCNews/data.json'
@@ -92,7 +91,7 @@ def main():
         net.train()
         running_loss = 0.0
         train_bar = tqdm(train_iter, file=sys.stdout)
-        for X, y in train_bar:
+        for step, (X, y) in enumerate(train_bar):
             X, y = X.to(device), y.to(device)
             optimizer.zero_grad()
             logits = net(X)
@@ -103,7 +102,7 @@ def main():
             # 打印进度
             running_loss += loss
             train_bar.desc = f'training epoch [{epoch}/{epochs}], loss: {loss:.3f}'
-
+            train_logger.log('train|epoch:{}\tstep:{}/{}\tloss:{:.4f}'.format(epoch, step, train_nums, running_loss))
 
         # 校验验证集的准确率
         net.eval()
@@ -115,7 +114,8 @@ def main():
                 pred = torch.argmax(logits, dim=-1)
                 correct_num += torch.eq(pred, y).sum().item()
         val_acc = correct_num / val_nums
-        print('testing accuracy, {} epoch {}'.format(val_acc, epoch))
+        print('epoch {}, training loss: {:.4f}, testing accuracy, {}'.format(epoch, running_loss / train_nums, val_acc))
+        acc_logger.log('test|epoch:{}\tloss:{:.4f},acc:{:3f}'.format(epoch, running_loss / train_nums, val_acc))
 
         # 存储权重
         if best_acc < val_acc:
