@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import sys
-import torch.multiprocessing
 
 import hanlp
 import os
 import collections
 import json
+import math
 from tqdm import tqdm
 
 # extern package
@@ -27,6 +27,8 @@ class ReadDatasetFold:
     #每个类别最多取这些数据
     _threshold = 20000
 
+    # 每个类别取 0.9作为train, 0.1作为test
+    _rate = 0.9
     def __init__(self, dir_path='/Users/jffalbert/Workspace/pycharmProject/semantic_computation/dataset/News'):
         assert os.path.exists(dir_path), 'file {} does not exist.'.format(dir_path)
         self.dir_path = dir_path
@@ -45,8 +47,10 @@ class ReadDatasetFold:
         # 保存label，按顺序
         print('Processing split files work....')
         label_texts = []
-        data = []
-        labels = []
+        data_train = []
+        labels_train = []
+        data_test = []
+        labels_test = []
 
         for idx, class_dir_name in enumerate(class_dirs):  # heavy work
             class_dir_path = os.path.join(self.dir_path, class_dir_name)
@@ -54,24 +58,33 @@ class ReadDatasetFold:
             # truncated
             filenames = filenames[ : min(len(filenames), self._threshold)]           # 取有限个数
 
-            data.extend([os.path.join(class_dir_path, filename) for filename in filenames])
-            labels.extend([0 for _ in range(len(filenames))])
+            # 切分数据 9:1
+            train_files = filenames[ : math.floor(0.9 * len(filenames))]
+            test_files = filenames[math.ceil(0.9 * len(filenames)) : ]
+
+            data_train.extend([os.path.join(class_dir_path, filename) for filename in train_files])
+            labels_train.extend([idx for _ in range(len(train_files))])
+
+            data_test.extend([os.path.join(class_dir_path, filename) for filename in test_files])
+            labels_test.extend([idx for _ in range(len(test_files))])
+
             label_texts.append(class_dir_name)
 
-            process_bar = tqdm(filenames, file=sys.stdout)
-            tokens_all = []
-            for filename in process_bar:
-                with open(os.path.join(class_dir_path, filename), 'r') as f:
-                    raw_text = ''.join(f.readlines())
-
-                tokens_all.extend(split_text(raw_text))
-                with open(os.path.join(self.dir_path, 'tokens_all.txt'), 'a') as f:
-                    f.write(str(list) + '\n')
-                process_bar.desc = 'processing class {}, filename {}'.format(class_dir_name, filename)
+            # 获取所有文件总的tokens, 很耗时间
+            # process_bar = tqdm(filenames, file=sys.stdout)
+            # for filename in process_bar:
+            #     with open(os.path.join(class_dir_path, filename), 'r') as f:
+            #         raw_text = ''.join(f.readlines())
+            #     process_bar.desc = 'processing class {}, filename {}'.format(class_dir_name, filename)
+            #     tokens_list = split_text(raw_text)
+            #     with open(os.path.join(self.dir_path, 'tokens_all.txt'), 'a') as f:
+            #         f.write(str(tokens_list) + '\n')
 
         # 写入文件
-        data_dict = { 'label_texts': label_texts, 'data': data, 'labels': labels }
-        self.write_to_json_file(data_dict, 'data.json')
+        data_train_dict = { 'label_texts': label_texts, 'data': data_train, 'labels': labels_train }
+        data_test_dict = { 'label_texts': label_texts, 'data': data_test, 'labels': labels_test }
+        self.write_to_json_file(data_train_dict, 'train.json')
+        self.write_to_json_file(data_test_dict, 'test.json')
 
     def write_to_json_file(self, data_dict, json_filename='data.json'):
         # 将数据目录放到json文件

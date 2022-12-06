@@ -11,12 +11,11 @@ from model import lstm
 from util import dataloader, log
 
 configs = {
-    "lr": 1e-4,
+    "lr": 2e-2,
     "epochs": 5,
 }
-
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
+def get_device():
+    return 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def collate_fn(batch):
     max_len = 500
@@ -38,7 +37,7 @@ def load_data(json_path='', tokens_filepath=''):
     return train_data, test_data
 
 
-def data_loader(data, batch_size=64, shuffle=True, num_workers=4):
+def data_loader(data, batch_size=64, shuffle=True, num_workers=0):
     return torch.utils.data.DataLoader(data, batch_size=batch_size,
                                        shuffle=shuffle,
                                        num_workers=num_workers,
@@ -46,10 +45,10 @@ def data_loader(data, batch_size=64, shuffle=True, num_workers=4):
                                        )
 def main():
     train_logger = log.FileLog('train.txt')
-    acc_logger = log.FileLog('test.txt')
+    device = get_device()
     # ===================== prepare training =====================
     # load data
-    json_path = '/home/xf/disk/dataset/THUCNews/data.json'
+    json_path = '/home/xf/disk/dataset/THUCNews/train.json'
     assert os.path.exists(json_path), 'dataset json file {} does not exist.'.format(json_path)
 
     tokens_path = '/home/xf/disk/dataset/THUCNews/tokens_all.txt'
@@ -69,24 +68,27 @@ def main():
     num_hiddens = 64
     num_classes = len(label_text)
     net = lstm.Net(vocab_size=vocab_size, embed_size=num_embeddings, num_hiddens=num_hiddens,
-                   num_classes=num_classes)
+                   num_classes=num_classes, device=get_device())
     net = net.to(device)
 
     # set optimizer
     params = [p for p in net.parameters() if p.requires_grad]
     optimizer = optim.Adam(params=params, lr=configs['lr'])
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+
     # set loss function
     loss_fun = nn.CrossEntropyLoss()
 
-    # ========================= training =======================
+    # ========================= training ================================
     best_acc = 0.0
-    val_nums = len(test_iter)
+    val_nums = len(test_data)
     train_nums = len(train_iter)
     epochs = configs['epochs']
     save_weight_path = os.path.join(os.getcwd(), 'pretrained', 'pretrained.pth')
 
-    if os.path.exists(save_weight_path):
-        net.load_state_dict(torch.load(save_weight_path, device=0))
+    # Load weight
+    # if os.path.exists(save_weight_path):
+    #     net.load_state_dict(torch.load(save_weight_path, map_location=lambda storage, loc: storage.cuda(0)))
     for epoch in range(epochs):
         net.train()
         running_loss = 0.0
@@ -97,12 +99,19 @@ def main():
             logits = net(X)
             loss = loss_fun(logits, y)
             loss.backward()
+
+            # for name, params in net.named_parameters():
+            #     print('-->name:', name, '-->grad_requires:', params.requires_grad, '--weight', torch.mean(params.data),
+            #           ' -->grad_value:', torch.mean(params.grad))
+
+            # nn.utils.clip_grad_norm_(net.parameters(), max_norm=10, norm_type=2)
             optimizer.step()
+            scheduler.step()
 
             # 打印进度
             running_loss += loss
-            train_bar.desc = f'training epoch [{epoch}/{epochs}], loss: {loss:.3f}'
-            train_logger.log('train|epoch:{}\tstep:{}/{}\tloss:{:.4f}'.format(epoch, step, train_nums, running_loss))
+            train_bar.desc = f'training epoch [{epoch + 1}/{epochs}], loss: {loss:.3f}'
+            train_logger.log('train|epoch:{}\tstep:{}/{}\tloss:{:.4f}'.format(epoch, step, train_nums, loss))
 
         # 校验验证集的准确率
         net.eval()
@@ -110,12 +119,12 @@ def main():
         with torch.no_grad():
             val_bar = tqdm(test_iter, file=sys.stdout)
             for X, y in val_bar:
+                X, y = X.to(device), y.to(device)
                 logits = net(X)
                 pred = torch.argmax(logits, dim=-1)
                 correct_num += torch.eq(pred, y).sum().item()
         val_acc = correct_num / val_nums
         print('epoch {}, training loss: {:.4f}, testing accuracy, {}'.format(epoch, running_loss / train_nums, val_acc))
-        acc_logger.log('test|epoch:{}\tloss:{:.4f},acc:{:3f}'.format(epoch, running_loss / train_nums, val_acc))
 
         # 存储权重
         if best_acc < val_acc:

@@ -5,10 +5,12 @@ import time
 
 
 class FileLog:
-    def __init__(self, filename=''):
-        # gen据当前时间创建文件
-        self.logger = self.get_logger()
+    def __init__(self, filename=None):
+        # 根据当前时间创建文件
+        assert filename is not None, 'filename is required.'
         self.filename = filename
+
+        self.logger = self.get_logger()
 
     # 记录数据
     def log(self, info_str):
@@ -21,16 +23,17 @@ class FileLog:
 
         formatter = logging.Formatter(fmt="[%(asctime)s|%(filename)s|%(levelname)s] %(message)s",
                                       datefmt="%a %b %d %H:%M:%S %Y")
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(formatter)
-        logger.addHandler(stream_handler)
+        # 打印到控制台
+        # stream_handler = logging.StreamHandler()
+        # stream_handler.setFormatter(formatter)
+        # logger.addHandler(stream_handler)
 
         # file handler
         log_dir = os.path.join(os.path.join(os.getcwd(), 'running'),
-                               time.strftime('%Y-%m-%d-%H.%M', time.localtime()))
+                               time.strftime('%Y-%m-%d-%H', time.localtime()))
         if not os.path.exists(log_dir):
-            os.mkdir(log_dir)
-        file_handler = logging.FileHandler(log_dir + self.filename, mode='w')
+            os.makedirs(log_dir)
+        file_handler = logging.FileHandler(os.path.join(log_dir, self.filename), mode='w')
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

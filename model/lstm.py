@@ -6,15 +6,17 @@ from torch import nn
 from torch.nn import functional as F
 
 # Init Params
-def init_weights(shape, sigma=0.01):
-    return nn.Parameter(torch.randn(shape) * sigma)
-
+def init_weights(shape, sigma=0.01, device='cuda'):
+    params = nn.Parameter(torch.randn(shape, device=device) * sigma)
+    nn.init.orthogonal_(params)
+    return params
 
 class LSTM(nn.Module):
-    def __init__(self, num_inputs, num_hiddens):
+    def __init__(self, num_inputs, num_hiddens, device='cuda'):
         super(LSTM, self).__init__()
         self.num_hiddens = num_hiddens
         self.num_inputs = num_inputs
+        self.device = device
 
         # Forget Gate
         self.W_xf, self.W_hf, self.b_f = self.triple()
@@ -28,7 +30,7 @@ class LSTM(nn.Module):
     def forward(self, inputs):
         # inputs [序列长度, 批量大小, 词向量长度]
         batch_size = inputs.shape[1]
-        H, C = self.begin_state(batch_size)
+        H, C = self.begin_state(batch_size, self.device)
         outputs = []
 
         for x in inputs:
@@ -48,7 +50,7 @@ class LSTM(nn.Module):
     def triple(self):
         return (init_weights((self.num_inputs, self.num_hiddens)),
                 init_weights((self.num_hiddens, self.num_hiddens)),
-                init_weights((self.num_hiddens, ))
+                nn.Parameter(torch.randn(self.num_hiddens, ))
                 )
 
 
@@ -82,21 +84,30 @@ class AdditiveAttention(nn.Module):
         return torch.bmm(self.dropout(self.attention_weights), values)
 
     def _softmax(self, scores):
-        return nn.functional.softmax(scores, dim=-1)
+        return F.softmax(scores, dim=-1)
 
 
 class Net(nn.Module):
-    def __init__(self, vocab_size, embed_size, num_hiddens, num_classes=5):
+    def __init__(self, vocab_size, embed_size, num_hiddens, num_classes=5, device='cuda'):
         super(Net, self).__init__()
         self.num_hiddens = num_hiddens
 
         self.embedding = nn.Embedding(vocab_size, embed_size)
-        self.lstm_layer = LSTM(embed_size, num_hiddens)
+        self.lstm_layer = LSTM(embed_size, num_hiddens, device=device)
         self.attention = AdditiveAttention(key_size=num_hiddens,
                                            query_size=num_hiddens, num_hiddens=num_hiddens, dropout=0.1)
 
         # 分类器
         self.classifier = nn.Linear(num_hiddens, num_classes)
+
+        # 初始化参数
+        for p in self.modules():
+            if type(p) == nn.Linear:
+                nn.init.xavier_normal_(p.weight)
+                if p.bias is not None:
+                    nn.init.zeros_(p.bias)
+            if type(p) == nn.Embedding:
+                nn.init.orthogonal_(p.weight)
 
     def forward(self, X):
         batch_size, num_steps = X.shape
